@@ -1,0 +1,17 @@
+[package]
+name = "para-notes"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0"
+axum = "0.8"
+clap = { version = "4.5", features = ["derive"] }
+comrak = { version = "0.34", default-features = false, features = ["syntect"] }
+regex = "1.10"
+serde = { version = "1.0", features = ["derive"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+
+[[bin]]
+name = "para"
+path = "src/main.rs"
