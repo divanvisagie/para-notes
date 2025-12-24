@@ -7,7 +7,7 @@ needed for offline use.
 ## Install
 
 ```sh
-cargo install --path /path/to/para-notes
+cargo install --git https://github.com/divanvisagie/para-notes
 ```
 
 Or run directly:

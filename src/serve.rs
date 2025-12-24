@@ -1,18 +1,24 @@
 use anyhow::Result;
 use axum::{
     body::Body,
-    extract::{Path, Query, State},
+    extract::{
+        ws::{Message, WebSocket},
+        Path, Query, State, WebSocketUpgrade,
+    },
     http::{header, StatusCode},
     response::{Html, IntoResponse, Redirect, Response},
     routing::get,
     Router,
 };
 use comrak::{markdown_to_html, Options};
+use futures::{SinkExt, StreamExt};
+use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use regex::Regex;
 use serde::Deserialize;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
+use tokio::sync::broadcast;
 
 const STYLES_CSS: &str = include_str!("../assets/styles.css");
 const MAIN_CSS: &str = include_str!("../assets/main.css");
@@ -30,20 +36,74 @@ struct SearchParams {
 
 struct AppState {
     notes_dir: PathBuf,
+    reload_tx: broadcast::Sender<String>,
 }
 
 pub async fn run_server(notes_dir: PathBuf, port: u16) -> Result<()> {
-    let state = Arc::new(AppState { notes_dir });
+    let (reload_tx, _) = broadcast::channel::<String>(16);
+
+    // Start file watcher
+    let watcher_tx = reload_tx.clone();
+    let watch_dir = notes_dir.clone();
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to create tokio runtime for watcher");
+
+        rt.block_on(async {
+            let (tx, mut rx) = tokio::sync::mpsc::channel(100);
+
+            let mut watcher: RecommendedWatcher =
+                notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
+                    if let Ok(event) = res {
+                        let _ = tx.blocking_send(event);
+                    }
+                })
+                .expect("Failed to create file watcher");
+
+            watcher
+                .watch(&watch_dir, RecursiveMode::Recursive)
+                .expect("Failed to watch directory");
+
+            while let Some(event) = rx.recv().await {
+                if matches!(
+                    event.kind,
+                    EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_)
+                ) {
+                    let is_md = event.paths.iter().any(|p| {
+                        p.extension().is_some_and(|ext| ext == "md")
+                    });
+                    if is_md {
+                        let path = event
+                            .paths
+                            .first()
+                            .and_then(|p| p.to_str())
+                            .unwrap_or("unknown")
+                            .to_string();
+                        let _ = watcher_tx.send(path);
+                    }
+                }
+            }
+        });
+    });
+
+    let state = Arc::new(AppState {
+        notes_dir,
+        reload_tx,
+    });
 
     let app = Router::new()
         .route("/", get(handle_root))
         .route("/search", get(handle_search))
+        .route("/ws", get(handle_websocket))
         .route("/fonts/{*path}", get(handle_fonts))
         .route("/{*path}", get(handle_path))
         .with_state(state);
 
     let addr = format!("0.0.0.0:{port}");
     println!("Serving notes at http://localhost:{port}");
+    println!("Live reload enabled - watching for file changes");
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     axum::serve(listener, app).await?;
@@ -131,6 +191,47 @@ async fn handle_fonts(Path(path): Path<String>) -> Response {
         .header(header::CONTENT_TYPE, content_type)
         .body(Body::from(bytes))
         .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
+}
+
+async fn handle_websocket(
+    State(state): State<Arc<AppState>>,
+    ws: WebSocketUpgrade,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| handle_socket(socket, state.reload_tx.subscribe()))
+}
+
+async fn handle_socket(socket: WebSocket, mut reload_rx: broadcast::Receiver<String>) {
+    let (mut sender, mut receiver) = socket.split();
+
+    // Spawn task to forward reload events to the client
+    let send_task = tokio::spawn(async move {
+        while let Ok(path) = reload_rx.recv().await {
+            let msg = serde_json::json!({
+                "type": "reload",
+                "path": path
+            });
+            if sender
+                .send(Message::Text(msg.to_string().into()))
+                .await
+                .is_err()
+            {
+                break;
+            }
+        }
+    });
+
+    // Keep connection alive by consuming incoming messages (pings, etc.)
+    let recv_task = tokio::spawn(async move {
+        while let Some(Ok(_)) = receiver.next().await {
+            // Just consume messages to keep connection alive
+        }
+    });
+
+    // Wait for either task to complete
+    tokio::select! {
+        _ = send_task => {},
+        _ = recv_task => {},
+    }
 }
 
 async fn serve_path(

@@ -71,3 +71,44 @@ document.querySelectorAll('.file-tree li.dir').forEach(li => {
     if (toggle) toggle.addEventListener('click', doToggle);
     if (link) link.addEventListener('click', doToggle);
 });
+
+// Live reload via WebSocket
+(function() {
+    let reconnectDelay = 1000;
+    const maxReconnectDelay = 30000;
+
+    function connect() {
+        const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const ws = new WebSocket(`${protocol}//${location.host}/ws`);
+
+        ws.onopen = () => {
+            console.log('[para] Live reload connected');
+            reconnectDelay = 1000;
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'reload') {
+                    console.log('[para] File changed:', data.path);
+                    location.reload();
+                }
+            } catch (e) {
+                console.error('[para] Failed to parse message:', e);
+            }
+        };
+
+        ws.onclose = () => {
+            console.log('[para] Live reload disconnected, reconnecting in', reconnectDelay, 'ms');
+            setTimeout(connect, reconnectDelay);
+            reconnectDelay = Math.min(reconnectDelay * 2, maxReconnectDelay);
+        };
+
+        ws.onerror = (err) => {
+            console.error('[para] WebSocket error:', err);
+            ws.close();
+        };
+    }
+
+    connect();
+})();
