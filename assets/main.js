@@ -131,3 +131,113 @@ document.body.addEventListener('htmx:afterSwap', (e) => {
 
     connect();
 })();
+
+// Live filtering of file tree
+(function() {
+    const searchInput = document.querySelector('.search-form input[name="q"]');
+    if (!searchInput) return;
+
+    function getExpandedDirs() {
+        return JSON.parse(localStorage.getItem('para-expanded-dirs') || '[]');
+    }
+
+    function filterTree(query) {
+        const lowerQuery = query.toLowerCase().trim();
+        const allItems = document.querySelectorAll('.file-tree li');
+
+        if (!lowerQuery) {
+            // Reset: show all, restore saved expanded state and original text
+            const expanded = getExpandedDirs();
+            allItems.forEach(li => {
+                li.style.display = '';
+                li.classList.remove('filter-match', 'filter-expanded');
+                const link = li.querySelector(':scope > a');
+                if (link && link.dataset.originalText) {
+                    link.textContent = link.dataset.originalText;
+                }
+            });
+            document.querySelectorAll('.file-tree li.dir').forEach(li => {
+                const link = li.querySelector(':scope > a');
+                const path = link ? link.getAttribute('href') : null;
+                if (path && expanded.includes(path)) {
+                    li.classList.add('expanded');
+                } else {
+                    li.classList.remove('expanded');
+                }
+            });
+            return;
+        }
+
+        // First pass: hide all, clear filter classes, restore original text
+        allItems.forEach(li => {
+            li.style.display = 'none';
+            li.classList.remove('filter-match', 'filter-expanded');
+            const link = li.querySelector(':scope > a');
+            if (link && link.dataset.originalText) {
+                link.textContent = link.dataset.originalText;
+            }
+        });
+
+        // Find matching items
+        allItems.forEach(li => {
+            const link = li.querySelector(':scope > a');
+            if (!link) return;
+
+            // Store original text if not already stored
+            if (!link.dataset.originalText) {
+                link.dataset.originalText = link.textContent;
+            }
+
+            const originalText = link.dataset.originalText;
+            const text = originalText.toLowerCase();
+            if (text.includes(lowerQuery)) {
+                li.classList.add('filter-match');
+                li.style.display = '';
+
+                // Highlight matching text
+                const idx = text.indexOf(lowerQuery);
+                const before = originalText.slice(0, idx);
+                const match = originalText.slice(idx, idx + lowerQuery.length);
+                const after = originalText.slice(idx + lowerQuery.length);
+                link.innerHTML = `${before}<mark>${match}</mark>${after}`;
+
+                // Show all parent directories
+                let parent = li.parentElement;
+                while (parent) {
+                    if (parent.tagName === 'LI' && parent.classList.contains('dir')) {
+                        parent.style.display = '';
+                        parent.classList.add('expanded', 'filter-expanded');
+                    }
+                    parent = parent.parentElement;
+                }
+            }
+        });
+
+        // Show children of matching directories
+        document.querySelectorAll('.file-tree li.dir.filter-match').forEach(dir => {
+            dir.classList.add('expanded');
+            dir.querySelectorAll('li').forEach(child => {
+                child.style.display = '';
+            });
+        });
+    }
+
+    searchInput.addEventListener('input', (e) => {
+        filterTree(e.target.value);
+    });
+
+    // Clear input after search is submitted
+    const searchForm = document.querySelector('.search-form');
+    if (searchForm) {
+        searchForm.addEventListener('htmx:afterRequest', () => {
+            searchInput.value = '';
+            filterTree('');
+        });
+        searchForm.addEventListener('submit', () => {
+            setTimeout(() => {
+                searchInput.value = '';
+                filterTree('');
+            }, 0);
+        });
+    }
+})();

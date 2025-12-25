@@ -146,6 +146,7 @@ async fn handle_search(
             "3",
             "-C",
             "1",
+            "-i",
             "--type",
             "md",
             &query,
@@ -375,10 +376,14 @@ fn render_search_results(output: &str, query: &str) -> String {
                     current_file = Some(file_part.to_string());
                 }
                 let escaped = html_escape(content);
-                let highlighted = escaped.replace(
-                    &html_escape(query),
-                    &format!("<mark>{}</mark>", html_escape(query)),
-                );
+                let escaped_query = regex::escape(&html_escape(query));
+                let highlight_re = Regex::new(&format!("(?i){}", escaped_query))
+                    .unwrap_or_else(|_| Regex::new("").unwrap());
+                let highlighted = highlight_re
+                    .replace_all(&escaped, |caps: &regex::Captures| {
+                        format!("<mark>{}</mark>", &caps[0])
+                    })
+                    .to_string();
                 lines_buffer.push(highlighted);
             }
         } else if line.starts_with("--") {
