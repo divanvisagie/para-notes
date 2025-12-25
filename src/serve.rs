@@ -20,9 +20,7 @@ use std::process::Command;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
-const STYLES_CSS: &str = include_str!("../assets/styles.css");
-const MAIN_CSS: &str = include_str!("../assets/main.css");
-const BLOG_JS: &str = include_str!("../assets/blog.js");
+const PARA_CSS: &str = include_str!("../assets/para.css");
 const PARA_JS: &str = include_str!("../assets/main.js");
 const UBUNTU_MONO_REGULAR: &[u8] = include_bytes!("../assets/fonts/UbuntuMono-Regular.ttf");
 const UBUNTU_MONO_ITALIC: &[u8] = include_bytes!("../assets/fonts/UbuntuMono-Italic.ttf");
@@ -496,207 +494,13 @@ fn wrap_html(title: &str, content: &str, file_tree: &str, search_query: &str) ->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{title} - para</title>
-    <style>{styles_css}</style>
-    <style>{main_css}</style>
-    <style>
-        body {{
-            display: flex;
-            flex-direction: column;
-            margin: 0;
-            min-height: 100vh;
-        }}
-        .navbar {{
-            display: flex;
-            align-items: center;
-            padding: 0 1.5rem;
-            height: 50px;
-            background: var(--background-color);
-            border-bottom: 1px solid var(--subtitle-color);
-        }}
-        .navbar .search-form {{
-            display: flex;
-            flex: 1;
-            max-width: 500px;
-            gap: 0.5rem;
-        }}
-        .navbar .search-form input {{
-            flex: 1;
-            padding: 0.4rem 0.75rem;
-            font-family: inherit;
-            font-size: inherit;
-            background: var(--code-background);
-            color: var(--text-color);
-            border: 1px solid var(--subtitle-color);
-            outline: none;
-        }}
-        .navbar .search-form input:focus {{
-            border-color: var(--accent-color);
-        }}
-        .navbar .search-form button {{
-            padding: 0.4rem 1rem;
-            font-family: inherit;
-            font-size: inherit;
-            background: var(--subtitle-color);
-            color: var(--background-color);
-            border: 1px solid var(--subtitle-color);
-            cursor: pointer;
-        }}
-        .navbar .search-form button:hover {{
-            background: var(--accent-color);
-            border-color: var(--accent-color);
-        }}
-        .content-wrapper {{
-            display: flex;
-            flex: 1;
-            overflow: hidden;
-        }}
-        .sidebar {{
-            display: flex;
-            height: calc(100vh - 50px);
-        }}
-        .file-tree {{
-            width: 280px;
-            min-width: 150px;
-            max-width: 600px;
-            padding: 1rem 1.5rem;
-            overflow-y: auto;
-            height: 100%;
-            box-sizing: border-box;
-            background: var(--background-color);
-        }}
-        .resize-handle {{
-            width: 4px;
-            cursor: col-resize;
-            background: var(--subtitle-color);
-            transition: background 0.2s;
-        }}
-        .resize-handle:hover,
-        .resize-handle.dragging {{
-            background: var(--accent-color);
-        }}
-        .file-tree ul {{
-            list-style: none;
-            padding-left: 1rem;
-            margin: 0;
-        }}
-        .file-tree > ul {{
-            padding-left: 0;
-        }}
-        .file-tree li {{
-            padding: 0.15rem 0;
-        }}
-        .file-tree li.dir {{
-            position: relative;
-        }}
-        .file-tree .toggle {{
-            display: inline-block;
-            width: 1rem;
-            cursor: pointer;
-            user-select: none;
-        }}
-        .file-tree .toggle::before {{
-            content: '▼';
-            font-size: 0.6rem;
-            color: var(--subtitle-color);
-            transition: transform 0.15s;
-            display: inline-block;
-        }}
-        .file-tree li.dir.collapsed .toggle::before {{
-            transform: rotate(-90deg);
-        }}
-        .file-tree li.dir.collapsed > ul {{
-            display: none;
-        }}
-        .file-tree a {{
-            text-decoration: none;
-            color: var(--text-color);
-        }}
-        .file-tree a:hover {{
-            color: var(--accent-color);
-        }}
-        .file-tree > a {{
-            font-weight: bold;
-            font-size: 1.1rem;
-            display: inline-block;
-            margin-bottom: 0.75rem;
-            border-bottom: 2px solid var(--accent-color);
-            padding-bottom: 2px;
-        }}
-        main {{
-            flex: 1;
-            padding: 2rem 2.5rem;
-            max-width: 800px;
-            overflow-y: auto;
-            height: calc(100vh - 50px);
-            box-sizing: border-box;
-        }}
-        main h1:first-child {{
-            margin-top: 0;
-        }}
-        .file-listing {{
-            list-style: none;
-            padding: 0;
-        }}
-        .file-listing li {{
-            padding: 0.5rem 0;
-            border-bottom: 1px solid var(--subtitle-color);
-        }}
-        .file-listing a {{
-            text-decoration: none;
-        }}
-        .file-listing a:hover {{
-            color: var(--accent-color);
-        }}
-        .search-result {{
-            margin-bottom: 1.5rem;
-        }}
-        .search-result a {{
-            color: var(--accent-color);
-            text-decoration: none;
-            font-weight: bold;
-        }}
-        .search-result a:hover {{
-            text-decoration: underline;
-        }}
-        .search-result pre {{
-            margin-top: 0.5rem;
-            white-space: pre-wrap;
-            word-break: break-word;
-        }}
-        mark {{
-            background: var(--accent-color);
-            color: var(--background-color);
-            padding: 0 0.2rem;
-        }}
-        table {{
-            border-collapse: collapse;
-            width: 100%;
-            margin: 1rem 0;
-        }}
-        th, td {{
-            border: 1px solid var(--subtitle-color);
-            padding: 0.5rem 0.75rem;
-            text-align: left;
-        }}
-        th {{
-            background: var(--code-background);
-        }}
-        code {{
-            background: var(--code-background);
-            padding: 0.1rem 0.3rem;
-            border: 1px solid var(--subtitle-color);
-        }}
-        pre {{
-            background: var(--code-background);
-            padding: 1rem;
-            border: 1px solid var(--subtitle-color);
-            overflow-x: auto;
-        }}
-        pre code {{
-            border: none;
-            padding: 0;
-        }}
-    </style>
+    <style>{para_css}</style>
+    <script>
+        (function() {{
+            var w = localStorage.getItem('para-sidebar-width');
+            if (w) document.documentElement.style.setProperty('--sidebar-width', w + 'px');
+        }})();
+    </script>
 </head>
 <body>
     <nav class="navbar">
@@ -708,13 +512,24 @@ fn wrap_html(title: &str, content: &str, file_tree: &str, search_query: &str) ->
     <div class="content-wrapper">
         <div class="sidebar">
             {file_tree}
+            <script>
+                (function() {{
+                    var expanded = JSON.parse(localStorage.getItem('para-expanded-dirs') || '[]');
+                    document.querySelectorAll('.file-tree li.dir').forEach(function(li) {{
+                        var link = li.querySelector(':scope > a');
+                        var path = link ? link.getAttribute('href') : null;
+                        if (path && expanded.indexOf(path) !== -1) {{
+                            li.classList.add('expanded');
+                        }}
+                    }});
+                }})();
+            </script>
             <div class="resize-handle"></div>
         </div>
         <main>
             {content}
         </main>
     </div>
-    <script>{blog_js}</script>
     <script>{para_js}</script>
 </body>
 </html>"#,
@@ -722,9 +537,7 @@ fn wrap_html(title: &str, content: &str, file_tree: &str, search_query: &str) ->
         content = content,
         file_tree = file_tree,
         search_query = html_escape(search_query),
-        styles_css = STYLES_CSS,
-        main_css = MAIN_CSS,
-        blog_js = BLOG_JS,
+        para_css = PARA_CSS,
         para_js = PARA_JS
     )
 }

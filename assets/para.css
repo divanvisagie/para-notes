@@ -1,0 +1,377 @@
+@font-face {
+    font-family: 'Ubuntu Mono';
+    src: url('/fonts/UbuntuMono-Regular.ttf') format('truetype');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Ubuntu Mono';
+    src: url('/fonts/UbuntuMono-Italic.ttf') format('truetype');
+    font-weight: 400;
+    font-style: italic;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Ubuntu Mono';
+    src: url('/fonts/UbuntuMono-Bold.ttf') format('truetype');
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Ubuntu Mono';
+    src: url('/fonts/UbuntuMono-BoldItalic.ttf') format('truetype');
+    font-weight: 700;
+    font-style: italic;
+    font-display: swap;
+}
+
+:root {
+    --accent-color: #ff6600;
+    --background-color: #ffffff;
+    --text-color: #111111;
+    --title-color: #0f0c0a;
+    --subtitle-color: #2f2925;
+    --link-color: #1a4fb5;
+    --link-color-visited: #5a3c99;
+    --code-background: #f5f5f5;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --background-color: #000000;
+        --text-color: #ededed;
+        --title-color: #ffffff;
+        --subtitle-color: #c5c5c5;
+        --link-color: #6f9dff;
+        --link-color-visited: #a88ce6;
+        --code-background: #1a1a1a;
+    }
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+}
+
+body {
+    font-family: 'Ubuntu Mono', 'Courier New', Courier, monospace;
+    font-size: 14pt;
+    line-height: 1.7;
+    color: var(--text-color);
+    background: var(--background-color);
+    display: flex;
+    flex-direction: column;
+}
+
+a {
+    color: var(--link-color);
+}
+
+a:visited {
+    color: var(--link-color-visited);
+}
+
+::selection {
+    background: var(--accent-color);
+    color: #ffffff;
+}
+
+/* Navbar */
+.navbar {
+    flex: 0 0 50px;
+    display: flex;
+    align-items: center;
+    padding: 0 1.5rem;
+    background: var(--background-color);
+    border-bottom: 1px solid var(--subtitle-color);
+}
+
+.navbar .search-form {
+    display: flex;
+    flex: 1;
+    max-width: 500px;
+    gap: 0.5rem;
+}
+
+.navbar .search-form input {
+    flex: 1;
+    padding: 0.4rem 0.75rem;
+    font-family: inherit;
+    font-size: inherit;
+    background: var(--code-background);
+    color: var(--text-color);
+    border: 1px solid var(--subtitle-color);
+    outline: none;
+}
+
+.navbar .search-form input:focus {
+    border-color: var(--accent-color);
+}
+
+.navbar .search-form button {
+    padding: 0.4rem 1rem;
+    font-family: inherit;
+    font-size: inherit;
+    background: var(--subtitle-color);
+    color: var(--background-color);
+    border: 1px solid var(--subtitle-color);
+    cursor: pointer;
+}
+
+.navbar .search-form button:hover {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+}
+
+/* Layout */
+.content-wrapper {
+    flex: 1 1 0;
+    display: flex;
+    min-height: 0;
+}
+
+.sidebar {
+    flex: 0 0 var(--sidebar-width, 280px);
+    display: flex;
+    min-width: 0;
+}
+
+.file-tree {
+    flex: 1 1 0;
+    min-width: 150px;
+    max-width: 600px;
+    padding: 1rem 1.5rem;
+    overflow-y: auto;
+    background: var(--background-color);
+}
+
+.resize-handle {
+    flex: 0 0 4px;
+    cursor: col-resize;
+    background: var(--subtitle-color);
+    transition: background 0.2s;
+}
+
+.resize-handle:hover,
+.resize-handle.dragging {
+    background: var(--accent-color);
+}
+
+main {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 2rem 2.5rem;
+    max-width: 800px;
+    overflow-y: auto;
+}
+
+/* File tree */
+.file-tree > a {
+    font-weight: bold;
+    font-size: 1.1rem;
+    display: inline-block;
+    margin-bottom: 0.75rem;
+    border-bottom: 2px solid var(--accent-color);
+    padding-bottom: 2px;
+    text-decoration: none;
+    color: var(--text-color);
+}
+
+.file-tree ul {
+    list-style: none;
+    padding-left: 1rem;
+    margin: 0;
+}
+
+.file-tree > ul {
+    padding-left: 0;
+}
+
+.file-tree li {
+    padding: 0.15rem 0;
+}
+
+.file-tree li.dir {
+    position: relative;
+}
+
+.file-tree .toggle {
+    display: inline-block;
+    width: 1rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.file-tree .toggle::before {
+    content: '\25BC';
+    font-size: 0.6rem;
+    color: var(--subtitle-color);
+    display: inline-block;
+    transform: rotate(-90deg);
+    transition: transform 0.15s;
+}
+
+.file-tree li.dir > ul {
+    display: none;
+}
+
+.file-tree li.dir.expanded .toggle::before {
+    transform: rotate(0deg);
+}
+
+.file-tree li.dir.expanded > ul {
+    display: block;
+}
+
+.file-tree a {
+    text-decoration: none;
+    color: var(--text-color);
+}
+
+.file-tree a:hover {
+    color: var(--accent-color);
+}
+
+/* Content */
+main h1:first-child {
+    margin-top: 0;
+}
+
+h1 {
+    color: var(--title-color);
+}
+
+h2 {
+    color: var(--subtitle-color);
+}
+
+.file-listing {
+    list-style: none;
+    padding: 0;
+}
+
+.file-listing li {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--subtitle-color);
+}
+
+.file-listing a {
+    text-decoration: none;
+}
+
+.file-listing a:hover {
+    color: var(--accent-color);
+}
+
+/* Search */
+.search-result {
+    margin-bottom: 1.5rem;
+}
+
+.search-result a {
+    color: var(--accent-color);
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.search-result a:hover {
+    text-decoration: underline;
+}
+
+.search-result pre {
+    margin-top: 0.5rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+mark {
+    background: var(--accent-color);
+    color: var(--background-color);
+    padding: 0 0.2rem;
+}
+
+/* Tables */
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1rem 0;
+}
+
+th, td {
+    border: 1px solid var(--subtitle-color);
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+}
+
+th {
+    background: var(--code-background);
+}
+
+/* Code */
+code {
+    background: var(--code-background);
+    padding: 0.1rem 0.3rem;
+    border: 1px solid var(--subtitle-color);
+}
+
+pre {
+    background: var(--code-background);
+    padding: 1rem;
+    border: 1px solid var(--subtitle-color);
+    overflow-x: auto;
+    position: relative;
+}
+
+pre code {
+    border: none;
+    padding: 0;
+}
+
+.copy-button {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: var(--text-color);
+    color: var(--background-color);
+    border: none;
+    padding: 4px 10px;
+    font-size: 12pt;
+    font-family: inherit;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+pre:hover .copy-button {
+    opacity: 1;
+}
+
+.copy-button:hover {
+    background: var(--accent-color);
+    color: #ffffff;
+}
+
+/* Images */
+img {
+    max-width: 100%;
+    border: 1px solid var(--subtitle-color);
+}
+
+/* Blockquotes */
+blockquote {
+    font-style: italic;
+    color: var(--subtitle-color);
+    border-left: 3px solid var(--accent-color);
+    margin-left: 0;
+    padding-left: 1rem;
+}
