@@ -23,6 +23,7 @@ use tokio::sync::broadcast;
 const PARA_CSS: &str = include_str!("../assets/para.css");
 const PARA_JS: &str = include_str!("../assets/main.js");
 const HTMX_JS: &str = include_str!("../assets/htmx.min.js");
+const MERMAID_JS: &str = include_str!("../assets/mermaid.min.js");
 const UBUNTU_MONO_REGULAR: &[u8] = include_bytes!("../assets/fonts/UbuntuMono-Regular.ttf");
 const UBUNTU_MONO_ITALIC: &[u8] = include_bytes!("../assets/fonts/UbuntuMono-Italic.ttf");
 const UBUNTU_MONO_BOLD: &[u8] = include_bytes!("../assets/fonts/UbuntuMono-Bold.ttf");
@@ -528,6 +529,7 @@ fn wrap_html(title: &str, content: &str, file_tree: &str, search_query: &str) ->
     <title>{title} - para</title>
     <style>{para_css}</style>
     <script>{htmx_js}</script>
+    <script>{mermaid_js}</script>
     <script>
         (function() {{
             var w = localStorage.getItem('para-sidebar-width');
@@ -572,6 +574,7 @@ fn wrap_html(title: &str, content: &str, file_tree: &str, search_query: &str) ->
         search_query = html_escape(search_query),
         para_css = PARA_CSS,
         htmx_js = HTMX_JS,
+        mermaid_js = MERMAID_JS,
         para_js = PARA_JS
     )
 }

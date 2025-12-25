@@ -70,9 +70,30 @@ function addCopyButtons(container) {
 
 addCopyButtons(document);
 
-// Re-add copy buttons after htmx swaps content
+// Mermaid diagrams
+mermaid.initialize({ startOnLoad: false, theme: 'neutral' });
+
+async function renderMermaid(container) {
+    const nodes = [];
+    container.querySelectorAll('pre > code.language-mermaid').forEach(code => {
+        const pre = code.parentElement;
+        const div = document.createElement('div');
+        div.className = 'mermaid';
+        div.textContent = code.textContent;
+        pre.replaceWith(div);
+        nodes.push(div);
+    });
+    if (nodes.length > 0) {
+        await mermaid.run({ nodes });
+    }
+}
+
+renderMermaid(document);
+
+// Re-add copy buttons and render mermaid after htmx swaps content
 document.body.addEventListener('htmx:afterSwap', (e) => {
     addCopyButtons(e.detail.target);
+    renderMermaid(e.detail.target);
 });
 
 // Live reload
