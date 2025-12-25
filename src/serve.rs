@@ -6,15 +6,15 @@ use axum::{
         Path, Query, State, WebSocketUpgrade,
     },
     http::{header, StatusCode},
-    response::{Html, IntoResponse, Redirect, Response},
-    routing::get,
+    response::{Html, IntoResponse, Json, Redirect, Response},
+    routing::{get, post},
     Router,
 };
 use comrak::{markdown_to_html, Options};
 use futures::{SinkExt, StreamExt};
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use regex::Regex;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
@@ -22,6 +22,7 @@ use tokio::sync::broadcast;
 
 const PARA_CSS: &str = include_str!("../assets/para.css");
 const PARA_JS: &str = include_str!("../assets/main.js");
+const EDITOR_JS: &str = include_str!("../assets/editor.js");
 const HTMX_JS: &str = include_str!("../assets/htmx.min.js");
 const MERMAID_JS: &str = include_str!("../assets/mermaid.min.js");
 const UBUNTU_MONO_REGULAR: &[u8] = include_bytes!("../assets/fonts/UbuntuMono-Regular.ttf");
@@ -32,6 +33,18 @@ const UBUNTU_MONO_BOLD_ITALIC: &[u8] = include_bytes!("../assets/fonts/UbuntuMon
 #[derive(Deserialize)]
 struct SearchParams {
     q: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct SaveRequest {
+    path: String,
+    content: String,
+}
+
+#[derive(Serialize)]
+struct SaveResponse {
+    success: bool,
+    error: Option<String>,
 }
 
 struct AppState {
@@ -96,6 +109,8 @@ pub async fn run_server(notes_dir: PathBuf, port: u16) -> Result<()> {
     let app = Router::new()
         .route("/", get(handle_root))
         .route("/search", get(handle_search))
+        .route("/save", post(handle_save))
+        .route("/raw/{*path}", get(handle_raw))
         .route("/ws", get(handle_websocket))
         .route("/fonts/{*path}", get(handle_fonts))
         .route("/{*path}", get(handle_path))
@@ -134,7 +149,7 @@ async fn handle_search(
 
     if query.is_empty() {
         let content = "<p>Enter a search term above.</p>";
-        return Ok(build_response("Search", content, &file_tree, &query, is_htmx));
+        return Ok(build_response("Search", content, &file_tree, &query, is_htmx, None));
     }
 
     let output = Command::new("rg")
@@ -159,7 +174,7 @@ async fn handle_search(
 
     if stdout.is_empty() {
         let content = format!("<h1>No results for \"{}\"</h1>", html_escape(&query));
-        return Ok(build_response("Search", &content, &file_tree, &query, is_htmx));
+        return Ok(build_response("Search", &content, &file_tree, &query, is_htmx, None));
     }
 
     let content = render_search_results(&stdout, &query);
@@ -169,6 +184,7 @@ async fn handle_search(
         &file_tree,
         &query,
         is_htmx,
+        None,
     ))
 }
 
@@ -204,6 +220,107 @@ async fn handle_fonts(Path(path): Path<String>) -> Response {
         .header(header::CONTENT_TYPE, content_type)
         .body(Body::from(bytes))
         .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
+}
+
+async fn handle_raw(
+    State(state): State<Arc<AppState>>,
+    Path(path): Path<String>,
+) -> Response {
+    let full_path = state.notes_dir.join(&path);
+
+    // Security: ensure path is within notes_dir
+    let canonical = match full_path.canonicalize() {
+        Ok(p) => p,
+        Err(_) => return StatusCode::NOT_FOUND.into_response(),
+    };
+    let notes_canonical = match state.notes_dir.canonicalize() {
+        Ok(p) => p,
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+    if !canonical.starts_with(&notes_canonical) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    // Only serve .md files as raw
+    if !canonical.extension().is_some_and(|ext| ext == "md") {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+
+    match std::fs::read_to_string(&canonical) {
+        Ok(content) => Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "text/plain; charset=utf-8")
+            .body(Body::from(content))
+            .unwrap(),
+        Err(_) => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+async fn handle_save(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<SaveRequest>,
+) -> Json<SaveResponse> {
+    let full_path = state.notes_dir.join(&payload.path.trim_start_matches('/'));
+
+    // Security: ensure path is within notes_dir
+    // For new files, check parent directory
+    let check_path = if full_path.exists() {
+        full_path.clone()
+    } else {
+        match full_path.parent() {
+            Some(p) if p.exists() => p.to_path_buf(),
+            _ => {
+                return Json(SaveResponse {
+                    success: false,
+                    error: Some("Invalid path".to_string()),
+                });
+            }
+        }
+    };
+
+    let canonical = match check_path.canonicalize() {
+        Ok(p) => p,
+        Err(_) => {
+            return Json(SaveResponse {
+                success: false,
+                error: Some("Invalid path".to_string()),
+            });
+        }
+    };
+    let notes_canonical = match state.notes_dir.canonicalize() {
+        Ok(p) => p,
+        Err(_) => {
+            return Json(SaveResponse {
+                success: false,
+                error: Some("Server error".to_string()),
+            });
+        }
+    };
+    if !canonical.starts_with(&notes_canonical) {
+        return Json(SaveResponse {
+            success: false,
+            error: Some("Access denied".to_string()),
+        });
+    }
+
+    // Only allow saving .md files
+    if !full_path.extension().is_some_and(|ext| ext == "md") {
+        return Json(SaveResponse {
+            success: false,
+            error: Some("Only markdown files can be saved".to_string()),
+        });
+    }
+
+    match std::fs::write(&full_path, &payload.content) {
+        Ok(_) => Json(SaveResponse {
+            success: true,
+            error: None,
+        }),
+        Err(e) => Json(SaveResponse {
+            success: false,
+            error: Some(e.to_string()),
+        }),
+    }
 }
 
 async fn handle_websocket(
@@ -273,7 +390,12 @@ async fn serve_path(
                 .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or("Note");
-            Ok(build_response(title, &html, &file_tree, query, is_htmx))
+            let edit_path = canonical
+                .strip_prefix(&notes_canonical)
+                .ok()
+                .and_then(|p| p.to_str())
+                .map(|p| format!("/{}", p));
+            Ok(build_response(title, &html, &file_tree, query, is_htmx, edit_path.as_deref()))
         } else {
             // Serve static files (images, etc.)
             let content_type = match ext {
@@ -295,37 +417,24 @@ async fn serve_path(
                 .unwrap())
         }
     } else if canonical.is_dir() {
-        let readme = canonical.join("README.md");
-        let index = canonical.join("INDEX.md");
-
-        if readme.exists() {
-            let content =
-                std::fs::read_to_string(&readme).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            let html = render_markdown(&content);
-            Ok(build_response("Notes", &html, &file_tree, query, is_htmx))
-        } else if index.exists() {
-            let content =
-                std::fs::read_to_string(&index).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            let html = render_markdown(&content);
-            Ok(build_response("Notes", &html, &file_tree, query, is_htmx))
-        } else {
-            let html = render_directory(&canonical, notes_dir)?;
-            let dir_name = canonical
-                .file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or("Notes");
-            Ok(build_response(dir_name, &html, &file_tree, query, is_htmx))
-        }
+        let html = render_directory(&canonical, notes_dir)?;
+        let dir_name = canonical
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("Notes");
+        Ok(build_response(dir_name, &html, &file_tree, query, is_htmx, None))
     } else {
         Err(StatusCode::NOT_FOUND)
     }
 }
 
-fn build_response(title: &str, content: &str, file_tree: &str, query: &str, is_htmx: bool) -> Response {
+fn build_response(title: &str, content: &str, file_tree: &str, query: &str, is_htmx: bool, edit_path: Option<&str>) -> Response {
+    let edit_attr = edit_path.map(|p| format!(" data-edit-path=\"{}\"", html_escape(p))).unwrap_or_default();
     if is_htmx {
-        // Return just the main content with a title update
+        // Return just the main content with a title update, plus edit path for JS
         let html = format!(
-            "<title>{title} - para</title>{content}",
+            "<title>{title} - para</title><script>document.querySelector('main').dataset.editPath='{edit_path}';</script>{content}",
+            edit_path = edit_path.unwrap_or(""),
             title = title,
             content = content
         );
@@ -335,7 +444,7 @@ fn build_response(title: &str, content: &str, file_tree: &str, query: &str, is_h
             .body(Body::from(html))
             .unwrap()
     } else {
-        Html(wrap_html(title, content, file_tree, query)).into_response()
+        Html(wrap_html(title, content, file_tree, query, edit_path)).into_response()
     }
 }
 
@@ -402,27 +511,7 @@ fn render_search_results(output: &str, query: &str) -> String {
     }
 }
 
-fn process_wiki_links(content: &str) -> String {
-    let re = Regex::new(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]").expect("valid regex");
-
-    re.replace_all(content, |caps: &regex::Captures| {
-        let target = caps.get(1).map(|m| m.as_str()).unwrap_or("");
-        let display = caps.get(2).map(|m| m.as_str()).unwrap_or(target);
-
-        let path = if target.ends_with(".md") {
-            format!("/{}", target)
-        } else {
-            format!("/{}.md", target)
-        };
-
-        format!("[{}]({})", display, path)
-    })
-    .to_string()
-}
-
 fn render_markdown(content: &str) -> String {
-    let processed = process_wiki_links(content);
-
     let mut options = Options::default();
     options.extension.strikethrough = true;
     options.extension.table = true;
@@ -431,7 +520,7 @@ fn render_markdown(content: &str) -> String {
     options.extension.footnotes = true;
     options.render.unsafe_ = true;
 
-    markdown_to_html(&processed, &options)
+    markdown_to_html(content, &options)
 }
 
 fn render_file_tree(dir: &PathBuf, notes_root: &PathBuf) -> Result<String, StatusCode> {
@@ -542,7 +631,8 @@ fn render_directory(dir: &PathBuf, notes_dir: &PathBuf) -> Result<String, Status
     Ok(html)
 }
 
-fn wrap_html(title: &str, content: &str, file_tree: &str, search_query: &str) -> String {
+fn wrap_html(title: &str, content: &str, file_tree: &str, search_query: &str, edit_path: Option<&str>) -> String {
+    let edit_attr = edit_path.map(|p| format!(" data-edit-path=\"{}\"", p)).unwrap_or_default();
     format!(
         r#"<!DOCTYPE html>
 <html lang="en">
@@ -553,6 +643,8 @@ fn wrap_html(title: &str, content: &str, file_tree: &str, search_query: &str) ->
     <style>{para_css}</style>
     <script>{htmx_js}</script>
     <script>{mermaid_js}</script>
+    <link rel="stylesheet" href="https://esm.sh/@milkdown/crepe@7/theme/common/style.css">
+    <link rel="stylesheet" href="https://esm.sh/@milkdown/crepe@7/theme/frame.css">
     <script>
         (function() {{
             var w = localStorage.getItem('para-sidebar-width');
@@ -567,6 +659,7 @@ fn wrap_html(title: &str, content: &str, file_tree: &str, search_query: &str) ->
             <button type="submit">Search</button>
         </form>
         <span class="current-path"></span>
+        <button id="edit-toggle" class="edit-toggle">Edit</button>
     </nav>
     <div class="content-wrapper">
         <div class="sidebar" hx-boost="true" hx-target="main" hx-push-url="true">
@@ -585,11 +678,13 @@ fn wrap_html(title: &str, content: &str, file_tree: &str, search_query: &str) ->
             </script>
             <div class="resize-handle"></div>
         </div>
-        <main hx-boost="true" hx-target="main" hx-push-url="true">
+        <main hx-boost="true" hx-target="main" hx-push-url="true"{edit_attr}>
             {content}
+            <div id="milkdown-editor"></div>
         </main>
     </div>
     <script>{para_js}</script>
+    <script type="module">{editor_js}</script>
 </body>
 </html>"#,
         title = title,
@@ -599,6 +694,8 @@ fn wrap_html(title: &str, content: &str, file_tree: &str, search_query: &str) ->
         para_css = PARA_CSS,
         htmx_js = HTMX_JS,
         mermaid_js = MERMAID_JS,
-        para_js = PARA_JS
+        para_js = PARA_JS,
+        editor_js = EDITOR_JS,
+        edit_attr = edit_attr
     )
 }

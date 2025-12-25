@@ -155,6 +155,51 @@ a:visited {
     opacity: 0.5;
 }
 
+.navbar .edit-toggle {
+    display: none;
+    margin-left: auto;
+    padding: 0.4rem 1rem;
+    font-family: inherit;
+    font-size: inherit;
+    background: var(--code-background);
+    color: var(--text-color);
+    border: 1px solid var(--subtitle-color);
+    cursor: pointer;
+}
+
+.navbar .edit-toggle:hover {
+    background: var(--accent-color);
+    color: var(--background-color);
+    border-color: var(--accent-color);
+}
+
+.navbar .edit-toggle.editing {
+    background: var(--accent-color);
+    color: var(--background-color);
+    border-color: var(--accent-color);
+}
+
+/* Editor styles */
+#milkdown-editor {
+    display: none;
+    height: 100%;
+    overflow-y: auto;
+}
+
+main.editing > *:not(#milkdown-editor) {
+    display: none;
+}
+
+main.editing #milkdown-editor {
+    display: block;
+}
+
+.milkdown {
+    height: 100%;
+    background: var(--background-color);
+    color: var(--text-color);
+}
+
 /* Layout */
 .content-wrapper {
     flex: 1 1 0;
