@@ -96,6 +96,88 @@ document.body.addEventListener('htmx:afterSwap', (e) => {
     renderMermaid(e.detail.target);
 });
 
+// Highlight current file in tree and update path display
+function highlightCurrentFile() {
+    const currentPath = decodeURIComponent(location.pathname);
+
+    // Update breadcrumb in navbar
+    const pathDisplay = document.querySelector('.current-path');
+    if (pathDisplay) {
+        pathDisplay.innerHTML = '';
+        const parts = currentPath.split('/').filter(p => p);
+
+        // Add root link
+        const rootLink = document.createElement('a');
+        rootLink.href = '/';
+        rootLink.textContent = 'Notes';
+        rootLink.setAttribute('hx-get', '/');
+        rootLink.setAttribute('hx-target', 'main');
+        rootLink.setAttribute('hx-push-url', 'true');
+        pathDisplay.appendChild(rootLink);
+
+        // Add each path segment
+        let href = '';
+        parts.forEach((part, i) => {
+            const sep = document.createElement('span');
+            sep.textContent = ' / ';
+            sep.className = 'breadcrumb-sep';
+            pathDisplay.appendChild(sep);
+
+            href += '/' + part;
+            const link = document.createElement('a');
+            link.href = href;
+            link.textContent = part;
+            link.setAttribute('hx-get', href);
+            link.setAttribute('hx-target', 'main');
+            link.setAttribute('hx-push-url', 'true');
+            pathDisplay.appendChild(link);
+        });
+
+        // Re-process htmx on new elements
+        if (window.htmx) {
+            htmx.process(pathDisplay);
+        }
+    }
+
+    // Remove previous active state
+    document.querySelectorAll('.file-tree a.active').forEach(a => {
+        a.classList.remove('active');
+    });
+
+    // Find and highlight current file
+    let activeLink = null;
+    document.querySelectorAll('.file-tree a').forEach(a => {
+        const href = decodeURIComponent(a.getAttribute('href') || '');
+        if (href === currentPath || href === currentPath + '/') {
+            a.classList.add('active');
+            activeLink = a;
+
+            // Expand parent directories
+            let parent = a.parentElement;
+            while (parent) {
+                if (parent.tagName === 'LI' && parent.classList.contains('dir')) {
+                    parent.classList.add('expanded');
+                }
+                parent = parent.parentElement;
+            }
+        }
+    });
+
+    // Scroll after DOM updates
+    if (activeLink) {
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                activeLink.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            });
+        });
+    }
+}
+
+highlightCurrentFile();
+
+// Re-highlight after htmx navigation
+document.body.addEventListener('htmx:afterSettle', highlightCurrentFile);
+
 // Live reload
 (function() {
     let reconnectDelay = 1000;

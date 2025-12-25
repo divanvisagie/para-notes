@@ -566,6 +566,7 @@ fn wrap_html(title: &str, content: &str, file_tree: &str, search_query: &str) ->
             <input type="text" name="q" placeholder="Search notes..." value="{search_query}" />
             <button type="submit">Search</button>
         </form>
+        <span class="current-path"></span>
     </nav>
     <div class="content-wrapper">
         <div class="sidebar" hx-boost="true" hx-target="main" hx-push-url="true">

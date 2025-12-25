@@ -133,6 +133,28 @@ a:visited {
     border-color: var(--accent-color);
 }
 
+.navbar .current-path {
+    margin-left: 1rem;
+    color: var(--subtitle-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.navbar .current-path a {
+    color: var(--subtitle-color);
+    text-decoration: none;
+}
+
+.navbar .current-path a:hover {
+    color: var(--accent-color);
+}
+
+.navbar .current-path .breadcrumb-sep {
+    color: var(--subtitle-color);
+    opacity: 0.5;
+}
+
 /* Layout */
 .content-wrapper {
     flex: 1 1 0;
@@ -240,6 +262,11 @@ main {
 
 .file-tree a:hover {
     color: var(--accent-color);
+}
+
+.file-tree a.active {
+    color: var(--accent-color);
+    font-weight: bold;
 }
 
 /* Content */
