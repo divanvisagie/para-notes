@@ -1,3 +1,24 @@
+// Keyboard shortcuts
+const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+const searchInput = document.querySelector('.search-form input[name="q"]');
+
+// Update placeholder with correct shortcut hint
+if (searchInput) {
+    const shortcut = isMac ? '⌘K' : 'Ctrl+K';
+    searchInput.placeholder = `Search notes... (${shortcut})`;
+}
+
+document.addEventListener('keydown', (e) => {
+    // Cmd+K (Mac) or Ctrl+K (Windows/Linux) to focus search
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        if (searchInput) {
+            searchInput.focus();
+            searchInput.select();
+        }
+    }
+});
+
 // Sidebar resize
 const handle = document.querySelector('.resize-handle');
 const sidebar = document.querySelector('.sidebar');
