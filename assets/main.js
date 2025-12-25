@@ -50,19 +50,29 @@ document.querySelectorAll('.file-tree li.dir').forEach(li => {
 });
 
 // Copy buttons for code blocks
-document.querySelectorAll('pre').forEach(pre => {
-    const button = document.createElement('button');
-    button.className = 'copy-button';
-    button.textContent = 'Copy';
-    button.addEventListener('click', () => {
-        const code = pre.querySelector('code');
-        const text = code ? code.textContent : pre.textContent;
-        navigator.clipboard.writeText(text).then(() => {
-            button.textContent = 'Copied!';
-            setTimeout(() => { button.textContent = 'Copy'; }, 2000);
+function addCopyButtons(container) {
+    container.querySelectorAll('pre:not(.has-copy-btn)').forEach(pre => {
+        pre.classList.add('has-copy-btn');
+        const button = document.createElement('button');
+        button.className = 'copy-button';
+        button.textContent = 'Copy';
+        button.addEventListener('click', () => {
+            const code = pre.querySelector('code');
+            const text = code ? code.textContent : pre.textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                button.textContent = 'Copied!';
+                setTimeout(() => { button.textContent = 'Copy'; }, 2000);
+            });
         });
+        pre.appendChild(button);
     });
-    pre.appendChild(button);
+}
+
+addCopyButtons(document);
+
+// Re-add copy buttons after htmx swaps content
+document.body.addEventListener('htmx:afterSwap', (e) => {
+    addCopyButtons(e.detail.target);
 });
 
 // Live reload

@@ -22,6 +22,7 @@ use tokio::sync::broadcast;
 
 const PARA_CSS: &str = include_str!("../assets/para.css");
 const PARA_JS: &str = include_str!("../assets/main.js");
+const HTMX_JS: &str = include_str!("../assets/htmx.min.js");
 const UBUNTU_MONO_REGULAR: &[u8] = include_bytes!("../assets/fonts/UbuntuMono-Regular.ttf");
 const UBUNTU_MONO_ITALIC: &[u8] = include_bytes!("../assets/fonts/UbuntuMono-Italic.ttf");
 const UBUNTU_MONO_BOLD: &[u8] = include_bytes!("../assets/fonts/UbuntuMono-Bold.ttf");
@@ -109,14 +110,20 @@ pub async fn run_server(notes_dir: PathBuf, port: u16) -> Result<()> {
     Ok(())
 }
 
-async fn handle_root(State(state): State<Arc<AppState>>) -> Result<Html<String>, StatusCode> {
-    serve_path(&state.notes_dir, &state.notes_dir, "").await
+async fn handle_root(
+    headers: axum::http::HeaderMap,
+    State(state): State<Arc<AppState>>,
+) -> Result<Response, StatusCode> {
+    let is_htmx = headers.contains_key("hx-request");
+    serve_path(&state.notes_dir, &state.notes_dir, "", is_htmx).await
 }
 
 async fn handle_search(
+    headers: axum::http::HeaderMap,
     State(state): State<Arc<AppState>>,
     Query(params): Query<SearchParams>,
-) -> Result<Html<String>, StatusCode> {
+) -> Result<Response, StatusCode> {
+    let is_htmx = headers.contains_key("hx-request");
     let query = params.q.unwrap_or_default();
     let notes_canonical = state
         .notes_dir
@@ -126,7 +133,7 @@ async fn handle_search(
 
     if query.is_empty() {
         let content = "<p>Enter a search term above.</p>";
-        return Ok(Html(wrap_html("Search", content, &file_tree, &query)));
+        return Ok(build_response("Search", content, &file_tree, &query, is_htmx));
     }
 
     let output = Command::new("rg")
@@ -150,27 +157,33 @@ async fn handle_search(
 
     if stdout.is_empty() {
         let content = format!("<h1>No results for \"{}\"</h1>", html_escape(&query));
-        return Ok(Html(wrap_html("Search", &content, &file_tree, &query)));
+        return Ok(build_response("Search", &content, &file_tree, &query, is_htmx));
     }
 
     let content = render_search_results(&stdout, &query);
-    Ok(Html(wrap_html(
+    Ok(build_response(
         &format!("Search: {}", query),
         &content,
         &file_tree,
         &query,
-    )))
+        is_htmx,
+    ))
 }
 
-async fn handle_path(State(state): State<Arc<AppState>>, Path(path): Path<String>) -> Response {
+async fn handle_path(
+    headers: axum::http::HeaderMap,
+    State(state): State<Arc<AppState>>,
+    Path(path): Path<String>,
+) -> Response {
+    let is_htmx = headers.contains_key("hx-request");
     let full_path = state.notes_dir.join(&path);
 
     if full_path.is_dir() && !path.ends_with('/') {
         return Redirect::permanent(&format!("/{path}/")).into_response();
     }
 
-    match serve_path(&state.notes_dir, &full_path, "").await {
-        Ok(html) => html.into_response(),
+    match serve_path(&state.notes_dir, &full_path, "", is_htmx).await {
+        Ok(resp) => resp,
         Err(status) => status.into_response(),
     }
 }
@@ -236,7 +249,8 @@ async fn serve_path(
     notes_dir: &PathBuf,
     path: &PathBuf,
     query: &str,
-) -> Result<Html<String>, StatusCode> {
+    is_htmx: bool,
+) -> Result<Response, StatusCode> {
     let canonical = path.canonicalize().map_err(|_| StatusCode::NOT_FOUND)?;
     let notes_canonical = notes_dir
         .canonicalize()
@@ -256,7 +270,7 @@ async fn serve_path(
                 .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or("Note");
-            Ok(Html(wrap_html(title, &html, &file_tree, query)))
+            Ok(build_response(title, &html, &file_tree, query, is_htmx))
         } else {
             Err(StatusCode::NOT_FOUND)
         }
@@ -268,22 +282,40 @@ async fn serve_path(
             let content =
                 std::fs::read_to_string(&readme).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             let html = render_markdown(&content);
-            Ok(Html(wrap_html("Notes", &html, &file_tree, query)))
+            Ok(build_response("Notes", &html, &file_tree, query, is_htmx))
         } else if index.exists() {
             let content =
                 std::fs::read_to_string(&index).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             let html = render_markdown(&content);
-            Ok(Html(wrap_html("Notes", &html, &file_tree, query)))
+            Ok(build_response("Notes", &html, &file_tree, query, is_htmx))
         } else {
             let html = render_directory(&canonical, notes_dir)?;
             let dir_name = canonical
                 .file_name()
                 .and_then(|s| s.to_str())
                 .unwrap_or("Notes");
-            Ok(Html(wrap_html(dir_name, &html, &file_tree, query)))
+            Ok(build_response(dir_name, &html, &file_tree, query, is_htmx))
         }
     } else {
         Err(StatusCode::NOT_FOUND)
+    }
+}
+
+fn build_response(title: &str, content: &str, file_tree: &str, query: &str, is_htmx: bool) -> Response {
+    if is_htmx {
+        // Return just the main content with a title update
+        let html = format!(
+            "<title>{title} - para</title>{content}",
+            title = title,
+            content = content
+        );
+        Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
+            .body(Body::from(html))
+            .unwrap()
+    } else {
+        Html(wrap_html(title, content, file_tree, query)).into_response()
     }
 }
 
@@ -495,6 +527,7 @@ fn wrap_html(title: &str, content: &str, file_tree: &str, search_query: &str) ->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{title} - para</title>
     <style>{para_css}</style>
+    <script>{htmx_js}</script>
     <script>
         (function() {{
             var w = localStorage.getItem('para-sidebar-width');
@@ -504,13 +537,13 @@ fn wrap_html(title: &str, content: &str, file_tree: &str, search_query: &str) ->
 </head>
 <body>
     <nav class="navbar">
-        <form class="search-form" action="/search" method="get">
+        <form class="search-form" action="/search" method="get" hx-get="/search" hx-target="main" hx-push-url="true">
             <input type="text" name="q" placeholder="Search notes..." value="{search_query}" />
             <button type="submit">Search</button>
         </form>
     </nav>
     <div class="content-wrapper">
-        <div class="sidebar">
+        <div class="sidebar" hx-boost="true" hx-target="main" hx-push-url="true">
             {file_tree}
             <script>
                 (function() {{
@@ -526,7 +559,7 @@ fn wrap_html(title: &str, content: &str, file_tree: &str, search_query: &str) ->
             </script>
             <div class="resize-handle"></div>
         </div>
-        <main>
+        <main hx-boost="true" hx-target="main" hx-push-url="true">
             {content}
         </main>
     </div>
@@ -538,6 +571,7 @@ fn wrap_html(title: &str, content: &str, file_tree: &str, search_query: &str) ->
         file_tree = file_tree,
         search_query = html_escape(search_query),
         para_css = PARA_CSS,
+        htmx_js = HTMX_JS,
         para_js = PARA_JS
     )
 }
