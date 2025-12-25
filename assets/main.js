@@ -295,13 +295,6 @@ document.body.addEventListener('htmx:afterSettle', highlightCurrentFile);
             }
         });
 
-        // Show children of matching directories
-        document.querySelectorAll('.file-tree li.dir.filter-match').forEach(dir => {
-            dir.classList.add('expanded');
-            dir.querySelectorAll('li').forEach(child => {
-                child.style.display = '';
-            });
-        });
     }
 
     searchInput.addEventListener('input', (e) => {
