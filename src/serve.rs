@@ -263,7 +263,8 @@ async fn serve_path(
     let file_tree = render_file_tree(&notes_canonical, &notes_canonical)?;
 
     if canonical.is_file() {
-        if canonical.extension().is_some_and(|ext| ext == "md") {
+        let ext = canonical.extension().and_then(|e| e.to_str()).unwrap_or("");
+        if ext == "md" {
             let content =
                 std::fs::read_to_string(&canonical).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             let html = render_markdown(&content);
@@ -273,7 +274,24 @@ async fn serve_path(
                 .unwrap_or("Note");
             Ok(build_response(title, &html, &file_tree, query, is_htmx))
         } else {
-            Err(StatusCode::NOT_FOUND)
+            // Serve static files (images, etc.)
+            let content_type = match ext {
+                "png" => "image/png",
+                "jpg" | "jpeg" => "image/jpeg",
+                "gif" => "image/gif",
+                "svg" => "image/svg+xml",
+                "webp" => "image/webp",
+                "pdf" => "application/pdf",
+                "css" => "text/css",
+                "js" => "application/javascript",
+                _ => "application/octet-stream",
+            };
+            let bytes = std::fs::read(&canonical).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            Ok(Response::builder()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_TYPE, content_type)
+                .body(Body::from(bytes))
+                .unwrap())
         }
     } else if canonical.is_dir() {
         let readme = canonical.join("README.md");
